@@ -28,38 +28,33 @@
 
 doc = """\
 uptimemon.py [-p processname=byte_size] [-g groupname=byte_size]
-          [-a byte_size] [-u uptime]
+          [-u uptime_limit] [-n uptimemon_name]
 
 Options:
 
--p -- specify a process_name=byte_size pair.  Restart the supervisor
-      process named 'process_name' when it uses more than byte_size
-      UPTIME.  If this process is in a group, it can be specified using
+-p -- specify a process_name=uptime_limit pair.  Restart the supervisor
+      process named 'process_name' when it up more than uptime_limit.
+      If this process is in a group, it can be specified using
       the 'process_name:group_name' syntax.
 
--g -- specify a group_name=byte_size pair.  Restart any process in this group
-      when it uses more than byte_size UPTIME.
+-g -- specify a group_name=uptime_limit pair.  Restart any process in this group
+      when it up more than uptime_limit.
 
--a -- specify a global byte_size.  Restart any child of the supervisord
-      under which this runs if it uses more than byte_size UPTIME.
-
--u -- optionally specify the minimum uptime in seconds for the process.
-      if the process uptime is longer than this value, no email is sent
-      (useful to only be notified if processes are restarted too often/early)
-
+-u -- specify a global uptime_limit.  Restart any child of the supervisord
+      under which this runs if it up more than uptime_limit.
       seconds can be specified as plain integer values or a suffix-multiplied integer
       (e.g. 1m). Valid suffixes are m (minute), h (hour) and d (day).
+
+-e -- exclude name of uptimemon supervisor eventlistener to avoid restart if you use -u option
+
 
 The -p and -g options may be specified more than once, allowing for
 specification of multiple groups and processes.
 
-Any byte_size can be specified as a plain integer (10000) or a
-suffix-multiplied integer (e.g. 1GB).  Valid suffixes are 'KB', 'MB'
-and 'GB'.
-
 A sample invocation:
 
-uptimemon.py -p program1=200MB -p theprog:thegroup=100MB -g thegroup=100MB -a 1GB -u 60"
+uptimemon.py -p program1=200s -p theprog:thegroup=10m -g thegroup=1h"
+uptimemon.py -n uptimemon -u 1h"
 """
 
 import os
@@ -174,8 +169,9 @@ class Uptimemon:
 
 
     def restart(self, name, currentuptime):
-        self.stderr.write('aaaaaaaaaaaaaaa name: %s uptimemonName: %s\n' % (name, self.uptimemonName))
-        if name != self.uptimemonName:
+        procgroup, procname = name.split(":")
+        self.stderr.write('aaaaaaaaaaaaaaa name: %s uptimemonName: %s   procgroup: %s   procname: %s\n' % (name, self.uptimemonName,procgroup,procname))
+        if procname != self.uptimemonName:
             info = self.rpc.supervisor.getProcessInfo(name)
             self.stderr.write('Restarting %s\n' % name)
             #uptimemonId = self.uptimemonName and " [%s]" % self.uptimemonName or ""
@@ -206,6 +202,15 @@ def parse_nametime(option, value):
     time = parse_time(option, time)
     return name, time
 
+def parse_time(option, value):
+    try:
+        time = seconds_time(value)
+    except:
+        print('Unparseable byte_size in %r for %r' % (value, option))
+        usage()
+    return time
+
+
 seconds_time = SuffixMultiplier({'s': 1,
                                  'm': 60,
                                  'h': 60 * 60,
@@ -222,13 +227,13 @@ def parse_seconds(option, value):
 
 def uptimemon_from_args(arguments):
     import getopt
-    short_args = "hp:g:u:n:"
+    short_args = "hp:g:u:e:"
     long_args = [
         "help",
         "program=",
         "group=",
         "uptime=",
-        "name=",
+        "exclude=",
         ]
 
     if not arguments:
@@ -259,7 +264,7 @@ def uptimemon_from_args(arguments):
         if option in ('-u', '--uptime'):
             uptime_limit = parse_seconds(option, value)
 
-        if option in ('-n', '--name'):
+        if option in ('-e', '--exclude'):
             name = value
 
     uptimemon = Uptimemon(programs=programs,
